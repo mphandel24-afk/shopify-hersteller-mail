@@ -7,12 +7,95 @@ const vendorEmails = {
 function formatShippingAddress(address) {
   if (!address) return "Keine Lieferadresse vorhanden";
 
-  const name = [address.first_name, address.last_name].filter(Boolean).join(" ");
-  const street = [address.address1, address.address2].filter(Boolean).join(" ");
-  const cityLine = [address.zip, address.city].filter(Boolean).join(" ");
-  const country = address.country || "";
+  const lines = [
+    [address.first_name, address.last_name].filter(Boolean).join(" "),
+    address.company || "",
+    address.address1 || "",
+    address.address2 || "",
+    [address.zip, address.city].filter(Boolean).join(" "),
+    address.country || "",
+    address.phone ? `Tel: ${address.phone}` : ""
+  ].filter(Boolean);
 
-  return [name, street, cityLine, country].filter(Boolean).join("\n");
+  return lines.join("\n");
+}
+
+async function createDeliveryNotePdf({
+  orderNumber,
+  vendor,
+  shippingAddress,
+  customerEmail,
+  customerPhone,
+  items
+}) {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([595, 842]); // A4
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  let y = 800;
+  const left = 50;
+  const lineHeight = 16;
+
+  const drawLine = (text, options = {}) => {
+    const {
+      x = left,
+      size = 11,
+      bold = false
+    } = options;
+
+    page.drawText(String(text), {
+      x,
+      y,
+      size,
+      font: bold ? boldFont : font
+    });
+    y -= lineHeight;
+  };
+
+  drawLine("Lieferschein", { size: 18, bold: true });
+  y -= 8;
+
+  drawLine(`Bestellnummer: ${orderNumber}`);
+  drawLine(`Hersteller: ${vendor}`);
+  y -= 8;
+
+  drawLine("Empfänger / Lieferadresse", { bold: true });
+  shippingAddress.split("\n").forEach(line => drawLine(line));
+  y -= 8;
+
+  drawLine(`E-Mail Kunde: ${customerEmail || "-"}`);
+  drawLine(`Telefon Kunde: ${customerPhone || "-"}`);
+  y -= 12;
+
+  drawLine("Bestellte Artikel", { bold: true });
+  y -= 4;
+
+  items.forEach((item, index) => {
+    drawLine(`${index + 1}. ${item.title || "-"}`, { bold: true });
+    drawLine(`EAN/SKU: ${item.sku || item.barcode || "-"}`);
+    drawLine(`Menge: ${item.quantity || 1}`);
+    drawLine(`Einzelpreis: ${item.price || "-"}`);
+    y -= 8;
+
+    if (y < 100) {
+      const newPage = pdfDoc.addPage([595, 842]);
+      y = 800;
+      newPage.drawText("Fortsetzung Lieferschein", {
+        x: left,
+        y,
+        size: 14,
+        font: boldFont
+      });
+      y -= 30;
+    }
+  });
+
+  y -= 10;
+  drawLine("Bitte Ware direkt an den oben genannten Empfänger versenden.");
+  drawLine("Vielen Dank.");
+
+  return await pdfDoc.save();
 }
 
 export default async function handler(req, res) {
@@ -25,10 +108,13 @@ export default async function handler(req, res) {
     const grouped = {};
 
     for (const item of order.line_items || []) {
-      const vendor = item.vendor || "UNKNOWN";
+      const vendor = (item.vendor || "UNKNOWN").trim();
       if (!grouped[vendor]) grouped[vendor] = [];
       grouped[vendor].push(item);
     }
+
+    console.log("Bestellung empfangen");
+    console.log("Gefundene Vendoren:", Object.keys(grouped));
 
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -42,14 +128,14 @@ export default async function handler(req, res) {
 
     await transporter.verify();
     console.log("SMTP Verbindung erfolgreich");
-    console.log("Gefundene Vendoren:", Object.keys(grouped));
 
     const orderNumber = order.name || order.order_number || "Unbekannt";
     const shippingAddress = formatShippingAddress(order.shipping_address);
     const customerEmail = order.email || "Keine E-Mail";
-    const customerPhone = order.phone || order.shipping_address?.phone || "Keine Telefonnummer";
+    const customerPhone =
+      order.phone || order.shipping_address?.phone || "Keine Telefonnummer";
 
-    for (const vendor in grouped) {
+    for (const vendor of Object.keys(grouped)) {
       const to = vendorEmails[vendor];
 
       if (!to) {
@@ -57,18 +143,20 @@ export default async function handler(req, res) {
         continue;
       }
 
-      const itemsText = grouped[vendor]
+      const items = grouped[vendor];
+
+      const itemsText = items
         .map((item, index) => {
-          return `${index + 1}. ${item.title}
+          return `${index + 1}. ${item.title || "-"}
 EAN/SKU: ${item.sku || item.barcode || "-"}
-Menge: ${item.quantity}
+Menge: ${item.quantity || 1}
 Einzelpreis: ${item.price || "-"}`;
         })
         .join("\n\n");
 
       const text = `Guten Tag,
 
-wir haben eine neue Bestellung erhalten und bitten um Bearbeitung.
+vielen Dank für die Bearbeitung dieser Bestellung.
 
 Bestellnummer: ${orderNumber}
 Hersteller: ${vendor}
@@ -86,11 +174,29 @@ Bitte versenden Sie die Ware direkt an den oben genannten Empfänger.
 
 Vielen Dank.`;
 
+      const pdfBytes = await createDeliveryNotePdf({
+        orderNumber,
+        vendor,
+        shippingAddress,
+        customerEmail,
+        customerPhone,
+        items
+      });
+
+      console.log("Sende an:", to);
+
       const info = await transporter.sendMail({
         from: process.env.MAIL_FROM,
         to,
         subject: `Neue Bestellung ${orderNumber}`,
-        text
+        text,
+        attachments: [
+          {
+            filename: `Lieferschein-${orderNumber}.pdf`,
+            content: Buffer.from(pdfBytes),
+            contentType: "application/pdf"
+          }
+        ]
       });
 
       console.log("Mail gesendet an:", to);

@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 
 const vendorEmails = {
-  "Bamato": "office@werkzeugprofi.at"
+  "Bamato": "office@werkzeugprofi24.at"
 };
 
 export default async function handler(req, res) {

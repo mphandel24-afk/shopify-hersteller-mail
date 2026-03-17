@@ -2,7 +2,13 @@ import nodemailer from "nodemailer";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
 const vendorEmails = {
-  "Bamato": "office@werkzeugprofi24.at"
+  "Bamato": "bestellung@bamato-maschinen.de"
+  "50NRTH": "sales@50nrth.com"
+  "Janschitz": "sales@janschitz-gmbh.at"
+  "PowerPac": "christian.urbschat@powerpac.de"
+  "Avola": "info@avola.de"
+
+
 };
 
 function formatShippingAddress(address) {

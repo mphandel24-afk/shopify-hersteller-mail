@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 
 const vendorEmails = {
-  Bosch: "test@example.com"
+  Bamato: "office@werkzeugprofi.at"
 };
 
 export default async function handler(req, res) {

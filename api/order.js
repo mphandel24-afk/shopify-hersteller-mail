@@ -76,7 +76,7 @@ async function createDeliveryNotePdf({
     drawLine(`${index + 1}. ${item.title || "-"}`, { bold: true });
     drawLine(`EAN/SKU: ${item.sku || item.barcode || "-"}`);
     drawLine(`Menge: ${item.quantity || 1}`);
-    drawLine(`Einzelpreis: ${item.price || "-"}`);
+    
     y -= 8;
 
     if (y < 100) {
@@ -151,7 +151,7 @@ export default async function handler(req, res) {
           return `${index + 1}. ${item.title || "-"}
 EAN/SKU: ${item.sku || item.barcode || "-"}
 Menge: ${item.quantity || 1}
-Einzelpreis: ${item.price || "-"}`;
+
         })
         .join("\n\n");
 

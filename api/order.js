@@ -30,7 +30,7 @@ async function createDeliveryNotePdf({
   items
 }) {
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([595, 842]); // A4
+  let page = pdfDoc.addPage([595, 842]);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -39,11 +39,7 @@ async function createDeliveryNotePdf({
   const lineHeight = 16;
 
   const drawLine = (text, options = {}) => {
-    const {
-      x = left,
-      size = 11,
-      bold = false
-    } = options;
+    const { x = left, size = 11, bold = false } = options;
 
     page.drawText(String(text), {
       x,
@@ -54,6 +50,13 @@ async function createDeliveryNotePdf({
     y -= lineHeight;
   };
 
+  const newPageIfNeeded = () => {
+    if (y < 100) {
+      page = pdfDoc.addPage([595, 842]);
+      y = 800;
+    }
+  };
+
   drawLine("Lieferschein", { size: 18, bold: true });
   y -= 8;
 
@@ -62,37 +65,30 @@ async function createDeliveryNotePdf({
   y -= 8;
 
   drawLine("Empfänger / Lieferadresse", { bold: true });
-  shippingAddress.split("\n").forEach(line => drawLine(line));
-  y -= 8;
+  shippingAddress.split("\n").forEach((line) => {
+    newPageIfNeeded();
+    drawLine(line);
+  });
 
+  y -= 8;
+  newPageIfNeeded();
   drawLine(`E-Mail Kunde: ${customerEmail || "-"}`);
   drawLine(`Telefon Kunde: ${customerPhone || "-"}`);
   y -= 12;
 
+  newPageIfNeeded();
   drawLine("Bestellte Artikel", { bold: true });
   y -= 4;
 
   items.forEach((item, index) => {
+    newPageIfNeeded();
     drawLine(`${index + 1}. ${item.title || "-"}`, { bold: true });
     drawLine(`EAN/SKU: ${item.sku || item.barcode || "-"}`);
     drawLine(`Menge: ${item.quantity || 1}`);
-    
     y -= 8;
-
-    if (y < 100) {
-      const newPage = pdfDoc.addPage([595, 842]);
-      y = 800;
-      newPage.drawText("Fortsetzung Lieferschein", {
-        x: left,
-        y,
-        size: 14,
-        font: boldFont
-      });
-      y -= 30;
-    }
   });
 
-  y -= 10;
+  newPageIfNeeded();
   drawLine("Bitte Ware direkt an den oben genannten Empfänger versenden.");
   drawLine("Vielen Dank.");
 
@@ -150,8 +146,7 @@ export default async function handler(req, res) {
         .map((item, index) => {
           return `${index + 1}. ${item.title || "-"}
 EAN/SKU: ${item.sku || item.barcode || "-"}
-Menge: ${item.quantity || 1}
-
+Menge: ${item.quantity || 1}`;
         })
         .join("\n\n");
 
@@ -183,8 +178,6 @@ Vielen Dank.`;
         customerPhone,
         items
       });
-
-      console.log("Sende an:", to);
 
       const info = await transporter.sendMail({
         from: process.env.MAIL_FROM,

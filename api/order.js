@@ -2,13 +2,11 @@ import nodemailer from "nodemailer";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
 const vendorEmails = {
-  "Bamato": "bestellung@bamato-maschinen.de"
-  "50NRTH": "sales@50nrth.com"
-  "Janschitz": "sales@janschitz-gmbh.at"
-  "PowerPac": "christian.urbschat@powerpac.de"
+  "Bamato": "bestellung@bamato-maschinen.de",
+  "50NRTH": "sales@50nrth.com",
+  "Janschitz": "sales@janschitz-gmbh.at",
+  "PowerPac": "christian.urbschat@powerpac.de",
   "Avola": "info@avola.de"
-
-
 };
 
 function formatShippingAddress(address) {
@@ -150,31 +148,27 @@ export default async function handler(req, res) {
 
       const itemsText = items
         .map((item, index) => {
-          return `${index + 1}. ${item.title || "-"}
-EAN/SKU: ${item.sku || item.barcode || "-"}
-Menge: ${item.quantity || 1}`;
+          return (
+            (index + 1) + ". " + (item.title || "-") + "\n" +
+            "EAN/SKU: " + (item.sku || item.barcode || "-") + "\n" +
+            "Menge: " + (item.quantity || 1)
+          );
         })
         .join("\n\n");
 
-      const text = `Guten Tag,
-
-vielen Dank für die Bearbeitung dieser Bestellung.
-
-Bestellnummer: ${orderNumber}
-Hersteller: ${vendor}
-
-Empfänger / Lieferadresse:
-${shippingAddress}
-
-E-Mail Kunde: ${customerEmail}
-Telefon Kunde: ${customerPhone}
-
-Bestellte Artikel:
-${itemsText}
-
-Bitte versenden Sie die Ware direkt an den oben genannten Empfänger.
-
-Vielen Dank.`;
+      const text =
+        "Guten Tag,\n\n" +
+        "vielen Dank für die Bearbeitung dieser Bestellung.\n\n" +
+        "Bestellnummer: " + orderNumber + "\n" +
+        "Hersteller: " + vendor + "\n\n" +
+        "Empfänger / Lieferadresse:\n" +
+        shippingAddress + "\n\n" +
+        "E-Mail Kunde: " + customerEmail + "\n" +
+        "Telefon Kunde: " + customerPhone + "\n\n" +
+        "Bestellte Artikel:\n" +
+        itemsText + "\n\n" +
+        "Bitte versenden Sie die Ware direkt an den oben genannten Empfänger.\n\n" +
+        "Vielen Dank.";
 
       const pdfBytes = await createDeliveryNotePdf({
         orderNumber,
@@ -188,11 +182,12 @@ Vielen Dank.`;
       const info = await transporter.sendMail({
         from: process.env.MAIL_FROM,
         to,
-        subject: `Neue Bestellung ${orderNumber}`,
+        bcc: "office@werkzeugprofi24.at",
+        subject: "Neue Bestellung " + orderNumber,
         text,
         attachments: [
           {
-            filename: `Lieferschein-${orderNumber}.pdf`,
+            filename: "Lieferschein-" + orderNumber + ".pdf",
             content: Buffer.from(pdfBytes),
             contentType: "application/pdf"
           }
@@ -200,6 +195,7 @@ Vielen Dank.`;
       });
 
       console.log("Mail gesendet an:", to);
+      console.log("BCC an office@werkzeugprofi24.at");
       console.log("Message ID:", info.messageId);
       console.log("Response:", info.response);
     }
